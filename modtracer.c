@@ -64,19 +64,16 @@ static void modtracer_memory_gaps(void) {
 
     for (i = 0; i < module_count - 1; i++) {
         for (addr = module_regions[i].end; addr < module_regions[i + 1].start; addr += ptr_size) {
-            if (copy_from_kernel_nofault(&value, (void *)addr, sizeof(value)) != 0)
-                continue;
-
-            if (value == (unsigned long)LIST_POISON1) {
-                if (copy_from_kernel_nofault(&value, (void *)(addr + ptr_size), sizeof(value)) != 0)
-                    continue;
-
-                if (value == (unsigned long)LIST_POISON2) {
-                    mod = (struct module *)(addr - ptr_size);
-                    pr_info("Hidden LKM Rootkit detected: %s! Check lsmod and then remove it", mod->name);
-                    list_add(&mod->list, THIS_MODULE->list.prev);
-                    break;
-                }
+            if (
+                copy_from_kernel_nofault(&value, (void *)addr, sizeof(value)) == 0 &&
+                value == (unsigned long)LIST_POISON1 &&
+                copy_from_kernel_nofault(&value, (void *)(addr + ptr_size), sizeof(value)) == 0 &&
+                value == (unsigned long)LIST_POISON2
+            ) {
+                mod = (struct module *)(addr - ptr_size);
+                pr_info("Hidden LKM Rootkit detected: %s! Check lsmod and then remove it", mod->name);
+                list_add(&mod->list, THIS_MODULE->list.prev);
+                break;
             }
         }
     }
@@ -84,15 +81,9 @@ static void modtracer_memory_gaps(void) {
 
 static int __init modtracer_init(void) {
     pr_info("ModTracer Loaded...\n");
-
-    if (gather_module_regions() < 0) {
-        return -ENOMEM;
-    }
-
+    if (gather_module_regions() < 0) return -ENOMEM;
     modtracer_memory_gaps();
-
     pr_info("ModTracer completed!\n");
-
     return 0;
 }
 
